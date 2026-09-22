@@ -1,0 +1,57 @@
+name: Windows RDP
+
+on:
+  workflow_dispatch:
+
+jobs:
+  rdp:
+    runs-on: windows-latest
+    timeout-minutes: 350
+    steps:
+      - name: Enable RDP
+        shell: powershell
+        run: |
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name 'fDenyTSConnections' -Value 0
+          Enable-NetFirewallRule -DisplayGroup 'Remote Desktop'
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name 'UserAuthentication' -Value 1
+
+      - name: Create RDP user
+        shell: powershell
+        env:
+          RDP_PASSWORD: ${{ secrets.RDP_PASSWORD }}
+        run: |
+          $secure = ConvertTo-SecureString $env:RDP_PASSWORD -AsPlainText -Force
+          if (Get-LocalUser -Name 'rdpuser' -ErrorAction SilentlyContinue) {
+            Set-LocalUser -Name 'rdpuser' -Password $secure
+          } else {
+            New-LocalUser -Name 'rdpuser' -Password $secure -AccountNeverExpires
+          }
+          Add-LocalGroupMember -Group 'Administrators' -Member 'rdpuser' -ErrorAction SilentlyContinue
+          Add-LocalGroupMember -Group 'Remote Desktop Users' -Member 'rdpuser' -ErrorAction SilentlyContinue
+
+      - name: Install Tailscale
+        shell: powershell
+        run: |
+          Invoke-WebRequest -Uri 'https://pkgs.tailscale.com/stable/tailscale-setup-latest.exe' -OutFile "$env:TEMP\tailscale-setup.exe"
+          Start-Process -FilePath "$env:TEMP\tailscale-setup.exe" -ArgumentList '/quiet' -Wait
+
+      - name: Connect to Tailscale
+        shell: powershell
+        env:
+          TS_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
+        run: |
+          & 'C:\Program Files\Tailscale\tailscale.exe' up --authkey=$env:TS_AUTHKEY --hostname=gh-rdp --accept-routes
+          $ip = & 'C:\Program Files\Tailscale\tailscale.exe' ip -4
+          Write-Host "=============================================="
+          Write-Host " RDP address: $ip"
+          Write-Host " User: rdpuser"
+          Write-Host " Connect with: mstsc /v:$ip"
+          Write-Host "=============================================="
+
+      - name: Keep alive (up to ~5h50m)
+        shell: powershell
+        run: |
+          for ($i = 0; $i -lt 340; $i++) {
+            Start-Sleep -Seconds 60
+            if ($i % 30 -eq 0) { Write-Host "Still alive - $($i) min elapsed" }
+          }
