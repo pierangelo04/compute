@@ -22,6 +22,15 @@ jobs:
             Write-Error "RDP_PASSWORD troppo corta: servono almeno 8 caratteri"
             exit 1
           }
+          $cats = 0
+          if ($env:RDP_PASSWORD -cmatch '[A-Z]') { $cats++ }
+          if ($env:RDP_PASSWORD -cmatch '[a-z]') { $cats++ }
+          if ($env:RDP_PASSWORD -match '[0-9]') { $cats++ }
+          if ($env:RDP_PASSWORD -match '[^A-Za-z0-9]') { $cats++ }
+          if ($cats -lt 3) {
+            Write-Error "RDP_PASSWORD troppo debole: servono almeno 3 di questi 4 gruppi: maiuscole, minuscole, numeri, simboli (es. Rdp#2026!Vm)"
+            exit 1
+          }
           if ([string]::IsNullOrEmpty($env:TS_AUTHKEY)) {
             Write-Error "Secret TAILSCALE_AUTHKEY mancante: Settings > Secrets and variables > Actions > New repository secret"
             exit 1
