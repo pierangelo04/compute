@@ -8,6 +8,26 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 350
     steps:
+      - name: Check secrets
+        shell: powershell
+        env:
+          RDP_PASSWORD: ${{ secrets.RDP_PASSWORD }}
+          TS_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
+        run: |
+          if ([string]::IsNullOrEmpty($env:RDP_PASSWORD)) {
+            Write-Error "Secret RDP_PASSWORD mancante: Settings > Secrets and variables > Actions > New repository secret"
+            exit 1
+          }
+          if ($env:RDP_PASSWORD.Length -lt 8) {
+            Write-Error "RDP_PASSWORD troppo corta: servono almeno 8 caratteri"
+            exit 1
+          }
+          if ([string]::IsNullOrEmpty($env:TS_AUTHKEY)) {
+            Write-Error "Secret TAILSCALE_AUTHKEY mancante: Settings > Secrets and variables > Actions > New repository secret"
+            exit 1
+          }
+          Write-Host "Secrets OK"
+
       - name: Enable RDP
         shell: powershell
         run: |
