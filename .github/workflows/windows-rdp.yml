@@ -58,6 +58,14 @@ jobs:
           Add-LocalGroupMember -Group 'Administrators' -Member 'rdpuser' -ErrorAction SilentlyContinue
           Add-LocalGroupMember -Group 'Remote Desktop Users' -Member 'rdpuser' -ErrorAction SilentlyContinue
 
+      - name: Restore Tailscale identity
+        uses: actions/cache/restore@v4
+        with:
+          path: C:\ProgramData\Tailscale
+          key: tailscale-node-${{ github.run_id }}
+          restore-keys: |
+            tailscale-node-
+
       - name: Install Tailscale
         shell: powershell
         run: |
@@ -75,6 +83,31 @@ jobs:
           Write-Host " RDP address: $ip"
           Write-Host " User: rdpuser"
           Write-Host " Connect with: mstsc /v:$ip"
+          Write-Host "=============================================="
+
+      - name: Stop Tailscale (flush node state)
+        shell: powershell
+        run: |
+          Stop-Service -Name Tailscale -Force -ErrorAction SilentlyContinue
+          Start-Sleep -Seconds 3
+
+      - name: Save Tailscale identity
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        with:
+          path: C:\ProgramData\Tailscale
+          key: tailscale-node-${{ github.run_id }}
+
+      - name: Restart Tailscale
+        shell: powershell
+        env:
+          TS_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
+        run: |
+          Start-Service -Name Tailscale
+          & 'C:\Program Files\Tailscale\tailscale.exe' up --authkey=$env:TS_AUTHKEY --hostname=gh-rdp --accept-routes
+          $ip = & 'C:\Program Files\Tailscale\tailscale.exe' ip -4
+          Write-Host "=============================================="
+          Write-Host " RDP address (stable IP): $ip"
           Write-Host "=============================================="
 
       - name: Keep alive (up to ~5h50m)
